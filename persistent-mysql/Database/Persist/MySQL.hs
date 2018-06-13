@@ -11,6 +11,12 @@ module Database.Persist.MySQL
     ( withMySQLPool
     , withMySQLConn
     , createMySQLPool
+    , withMySQLPoolMB4
+    , withMySQLConnMB4
+    , createMySQLPoolMB4
+    , withMySQLPoolEnc
+    , withMySQLConnEnc
+    , createMySQLPoolEnc
     , module Database.Persist.Sql
     , MySQL.ConnectInfo(..)
     , MySQLBase.SSLInfo(..)
@@ -86,6 +92,7 @@ import Prelude
 -- The pool is properly released after the action finishes using
 -- it.  Note that you should not use the given 'ConnectionPool'
 -- outside the action since it may be already been released.
+-- The default column encoding is 'utf8' aka 'utf8mb3'.
 withMySQLPool :: (MonadLogger m, MonadUnliftIO m, IsSqlBackend backend)
               => MySQL.ConnectInfo
               -- ^ Connection information.
@@ -94,36 +101,124 @@ withMySQLPool :: (MonadLogger m, MonadUnliftIO m, IsSqlBackend backend)
               -> (Pool backend -> m a)
               -- ^ Action to be executed that uses the connection pool.
               -> m a
-withMySQLPool ci = withSqlPool $ open' ci
+withMySQLPool ci = withSqlPool $ open' (DefEnc "utf8") ci
 
 
 -- | Create a MySQL connection pool.  Note that it's your
 -- responsibility to properly close the connection pool when
 -- unneeded.  Use 'withMySQLPool' for automatic resource control.
+-- The default column encoding is 'utf8' aka 'utf8mb3'.
 createMySQLPool :: (MonadUnliftIO m, MonadLogger m, IsSqlBackend backend)
                 => MySQL.ConnectInfo
                 -- ^ Connection information.
                 -> Int
                 -- ^ Number of connections to be kept open in the pool.
                 -> m (Pool backend)
-createMySQLPool ci = createSqlPool $ open' ci
+createMySQLPool ci = createSqlPool $ open' (DefEnc "utf8") ci
 
 
 -- | Same as 'withMySQLPool', but instead of opening a pool
 -- of connections, only one connection is opened.
+-- The default column encoding is 'utf8' aka 'utf8mb3'.
 withMySQLConn :: (MonadUnliftIO m, MonadLogger m, IsSqlBackend backend)
               => MySQL.ConnectInfo
               -- ^ Connection information.
               -> (backend -> m a)
               -- ^ Action to be executed that uses the connection.
               -> m a
-withMySQLConn = withSqlConn . open'
+withMySQLConn = withSqlConn . open' (DefEnc "utf8")
 
+
+-- | Create a MySQL connection pool and run the given action.
+-- The pool is properly released after the action finishes using
+-- it.  Note that you should not use the given 'ConnectionPool'
+-- outside the action since it may be already been released.
+-- The default column encoding is 'utf8mb4' (usually known as UTF-8).
+withMySQLPoolMB4 :: (MonadLogger m, MonadUnliftIO m, IsSqlBackend backend)
+                 => MySQL.ConnectInfo
+                 -- ^ Connection information.
+                 -> Int
+                 -- ^ Number of connections to be kept open in the pool.
+                 -> (Pool backend -> m a)
+                 -- ^ Action to be executed that uses the connection pool.
+                 -> m a
+withMySQLPoolMB4 ci = withSqlPool $ open' (DefEnc "utf8mb4") ci
+
+
+-- | Create a MySQL connection pool.  Note that it's your
+-- responsibility to properly close the connection pool when
+-- unneeded.  Use 'withMySQLPool' for automatic resource control.
+-- The default column encoding is 'utf8mb4' (usually known as UTF-8).
+createMySQLPoolMB4 :: (MonadUnliftIO m, MonadLogger m, IsSqlBackend backend)
+                   => MySQL.ConnectInfo
+                   -- ^ Connection information.
+                   -> Int
+                   -- ^ Number of connections to be kept open in the pool.
+                   -> m (Pool backend)
+createMySQLPoolMB4 ci = createSqlPool $ open' (DefEnc "utf8mb4") ci
+
+
+-- | Same as 'withMySQLPool', but instead of opening a pool
+-- of connections, only one connection is opened.
+-- The default column encoding is 'utf8mb4' (usually known as UTF-8).
+withMySQLConnMB4 :: (MonadUnliftIO m, MonadLogger m, IsSqlBackend backend)
+                 => MySQL.ConnectInfo
+                 -- ^ Connection information.
+                 -> (backend -> m a)
+                 -- ^ Action to be executed that uses the connection.
+                 -> m a
+withMySQLConnMB4 = withSqlConn . open' (DefEnc "utf8mb4")
+
+-- | Create a MySQL connection pool and run the given action.
+-- The pool is properly released after the action finishes using
+-- it.  Note that you should not use the given 'ConnectionPool'
+-- outside the action since it may be already been released.
+withMySQLPoolEnc :: (MonadLogger m, MonadUnliftIO m, IsSqlBackend backend)
+                 => MySQL.ConnectInfo
+                 -- ^ Connection information.
+                 -> String
+                 -- ^ Default column encoding
+                 -> Int
+                 -- ^ Number of connections to be kept open in the pool.
+                 -> (Pool backend -> m a)
+                 -- ^ Action to be executed that uses the connection pool.
+                 -> m a
+withMySQLPoolEnc ci defEnc = withSqlPool $ open' (DefEnc defEnc) ci
+
+
+-- | Create a MySQL connection pool.  Note that it's your
+-- responsibility to properly close the connection pool when
+-- unneeded.  Use 'withMySQLPool' for automatic resource control.
+createMySQLPoolEnc :: (MonadUnliftIO m, MonadLogger m, IsSqlBackend backend)
+                   => MySQL.ConnectInfo
+                   -- ^ Connection information.
+                   -> String
+                   -- ^ Default column encoding
+                   -> Int
+                   -- ^ Number of connections to be kept open in the pool.
+                   -> m (Pool backend)
+createMySQLPoolEnc ci defEnc = createSqlPool $ open' (DefEnc defEnc) ci
+
+
+-- | Same as 'withMySQLPool', but instead of opening a pool
+-- of connections, only one connection is opened.
+withMySQLConnEnc :: (MonadUnliftIO m, MonadLogger m, IsSqlBackend backend)
+                 => MySQL.ConnectInfo
+                 -- ^ Connection information.
+                 -> String
+                 -- ^ Default column encoding
+                 -> (backend -> m a)
+                 -- ^ Action to be executed that uses the connection.
+                 -> m a
+withMySQLConnEnc ci defEnc = withSqlConn $ open' (DefEnc defEnc) ci
+
+-- The default column encoding.
+newtype DefEnc = DefEnc {unDefEnc :: String}
 
 -- | Internal function that opens a connection to the MySQL
 -- server.
-open' :: (IsSqlBackend backend) => MySQL.ConnectInfo -> LogFunc -> IO backend
-open' ci logFunc = do
+open' :: (IsSqlBackend backend) => DefEnc -> MySQL.ConnectInfo -> LogFunc -> IO backend
+open' defEnc ci logFunc = do
     conn <- MySQL.connect ci
     MySQLBase.autocommit conn False -- disable autocommit!
     smap <- newIORef $ Map.empty
@@ -135,7 +230,7 @@ open' ci logFunc = do
         , connUpsertSql = Nothing
         , connPutManySql = Just putManySql
         , connClose      = MySQL.close conn
-        , connMigrateSql = migrate' ci
+        , connMigrateSql = migrate' defEnc ci
         , connBegin      = const $ MySQL.execute_ conn "start transaction" >> return ()
         , connCommit     = const $ MySQL.commit   conn
         , connRollback   = const $ MySQL.rollback conn
@@ -326,12 +421,13 @@ getGetter field = go (MySQLBase.fieldType field)
 
 -- | Create the migration plan for the given 'PersistEntity'
 -- @val@.
-migrate' :: MySQL.ConnectInfo
+migrate' :: DefEnc
+         -> MySQL.ConnectInfo
          -> [EntityDef]
          -> (Text -> IO Statement)
          -> EntityDef
          -> IO (Either [Text] [(Bool, Text)])
-migrate' connectInfo allDefs getter val = do
+migrate' defEnc connectInfo allDefs getter val = do
     let name = entityDB val
     (idClmn, old) <- getColumns connectInfo getter val
     let (newcols, udefs, fdefs) = mkColumns allDefs val
@@ -350,7 +446,7 @@ migrate' connectInfo allDefs getter val = do
         let foreignsAlt = map (\fdef -> let (childfields, parentfields) = unzip (map (\((_,b),(_,d)) -> (b,d)) (foreignFields fdef))
                                         in AlterColumn name (foreignRefTableDBName fdef, AddReference (foreignRefTableDBName fdef) (foreignConstraintNameDBName fdef) childfields parentfields)) fdefs
 
-        return $ Right $ map showAlterDb $ (addTable newcols val): uniques ++ foreigns ++ foreignsAlt
+        return $ Right $ map (showAlterDb defEnc) $ (addTable defEnc newcols val): uniques ++ foreigns ++ foreignsAlt
       -- No errors and something found, migrate
       (_, _, ([], old')) -> do
         let excludeForeignKeys (xs,ys) = (map (\c -> case cReference c of
@@ -358,10 +454,10 @@ migrate' connectInfo allDefs getter val = do
                                                                      Just _ -> c { cReference = Nothing }
                                                                      Nothing -> c
                                                     Nothing -> c) xs,ys)
-            (acs, ats) = getAlters allDefs name (newcols, udspair) $ excludeForeignKeys $ partitionEithers old'
+            (acs, ats) = getAlters defEnc allDefs name (newcols, udspair) $ excludeForeignKeys $ partitionEithers old'
             acs' = map (AlterColumn name) acs
             ats' = map (AlterTable  name) ats
-        return $ Right $ map showAlterDb $ acs' ++ ats'
+        return $ Right $ map (showAlterDb defEnc) $ acs' ++ ats'
       -- Errors
       (_, _, (errs, _)) -> return $ Left errs
 
@@ -370,15 +466,15 @@ migrate' connectInfo allDefs getter val = do
                                             (_, ml) = findMaxLenOfColumn allDefs tblName col
                                          in (col', ty, ml)
 
-addTable :: [Column] -> EntityDef -> AlterDB
-addTable cols entity = AddTable $ concat
+addTable :: DefEnc -> [Column] -> EntityDef -> AlterDB
+addTable defEnc cols entity = AddTable $ concat
            -- Lower case e: see Database.Persist.Sql.Migration
            [ "CREATe TABLE "
            , escapeDBName name
            , "("
            , idtxt
            , if null cols then [] else ","
-           , intercalate "," $ map showColumn cols
+           , intercalate "," $ map (showColumn defEnc) cols
            , ")"
            ]
     where
@@ -394,7 +490,7 @@ addTable cols entity = AddTable $ concat
                       maxlen = findMaxLenOfField (entityId entity)
                   in concat
                          [ escapeDBName $ fieldDB $ entityId entity
-                         , " " <> showSqlType sType maxlen False
+                         , " " <> showSqlType defEnc sType maxlen False
                          , " NOT NULL"
                          , autoIncrementText
                          , " PRIMARY KEY"
@@ -573,7 +669,7 @@ getColumn connectInfo getter tname [ PersistText cname
                     _ -> fail $ "Invalid default column: " ++ show default'
 
       -- Foreign key (if any)
-      stmt <- lift . getter $ T.concat 
+      stmt <- lift . getter $ T.concat
         [ "SELECT REFERENCED_TABLE_NAME, "
         ,   "CONSTRAINT_NAME, "
         ,   "ORDINAL_POSITION "
@@ -662,17 +758,18 @@ parseColumnType _ ci                                           = return (SqlOthe
 
 -- | @getAlters allDefs tblName new old@ finds out what needs to
 -- be changed from @old@ to become @new@.
-getAlters :: [EntityDef]
+getAlters :: DefEnc
+          -> [EntityDef]
           -> DBName
           -> ([Column], [(DBName, [DBName])])
           -> ([Column], [(DBName, [DBName])])
           -> ([AlterColumn'], [AlterTable])
-getAlters allDefs tblName (c1, u1) (c2, u2) =
+getAlters defEnc allDefs tblName (c1, u1) (c2, u2) =
     (getAltersC c1 c2, getAltersU u1 u2)
   where
     getAltersC [] old = concatMap dropColumn old
     getAltersC (new:news) old =
-        let (alters, old') = findAlters tblName allDefs new old
+        let (alters, old') = findAlters defEnc tblName allDefs new old
          in alters ++ getAltersC news old'
 
     dropColumn col =
@@ -701,8 +798,8 @@ getAlters allDefs tblName (c1, u1) (c2, u2) =
 -- | @findAlters newColumn oldColumns@ finds out what needs to be
 -- changed in the columns @oldColumns@ for @newColumn@ to be
 -- supported.
-findAlters :: DBName -> [EntityDef] -> Column -> [Column] -> ([AlterColumn'], [Column])
-findAlters tblName allDefs col@(Column name isNull type_ def _defConstraintName maxLen ref) cols =
+findAlters :: DefEnc -> DBName -> [EntityDef] -> Column -> [Column] -> ([AlterColumn'], [Column])
+findAlters defEnc tblName allDefs col@(Column name isNull type_ def _defConstraintName maxLen ref) cols =
     case filter ((name ==) . cName) cols of
     -- new fkey that didnt exist before
         [] -> case ref of
@@ -718,7 +815,7 @@ findAlters tblName allDefs col@(Column name isNull type_ def _defConstraintName 
                             (False, Just (tname, _cname)) -> [(tname, addReference allDefs (refName tblName name) tname name)]
                             _ -> []
                 -- Type and nullability
-                modType | showSqlType type_ maxLen False `ciEquals` showSqlType type_' maxLen' False && isNull == isNull' = []
+                modType | showSqlType defEnc type_ maxLen False `ciEquals` showSqlType defEnc type_' maxLen' False && isNull == isNull' = []
                         | otherwise = [(name, Change col)]
                 -- Default value
                 -- Avoid DEFAULT NULL, since it is always unnecessary, and is an error for text/blob fields
@@ -738,11 +835,11 @@ findAlters tblName allDefs col@(Column name isNull type_ def _defConstraintName 
 
 -- | Prints the part of a @CREATE TABLE@ statement about a given
 -- column.
-showColumn :: Column -> String
-showColumn (Column n nu t def _defConstraintName maxLen ref) = concat
+showColumn :: DefEnc -> Column -> String
+showColumn defEnc (Column n nu t def _defConstraintName maxLen ref) = concat
     [ escapeDBName n
     , " "
-    , showSqlType t maxLen True
+    , showSqlType defEnc t maxLen True
     , " "
     , if nu then "NULL" else "NOT NULL"
     , case def of
@@ -757,35 +854,36 @@ showColumn (Column n nu t def _defConstraintName maxLen ref) = concat
 
 
 -- | Renders an 'SqlType' in MySQL's format.
-showSqlType :: SqlType
+showSqlType :: DefEnc
+            -> SqlType
             -> Maybe Integer -- ^ @maxlen@
             -> Bool -- ^ include character set information?
             -> String
-showSqlType SqlBlob    Nothing    _     = "BLOB"
-showSqlType SqlBlob    (Just i)   _     = "VARBINARY(" ++ show i ++ ")"
-showSqlType SqlBool    _          _     = "TINYINT(1)"
-showSqlType SqlDay     _          _     = "DATE"
-showSqlType SqlDayTime _          _     = "DATETIME"
-showSqlType SqlInt32   _          _     = "INT(11)"
-showSqlType SqlInt64   _          _     = "BIGINT"
-showSqlType SqlReal    _          _     = "DOUBLE"
-showSqlType (SqlNumeric s prec) _ _     = "NUMERIC(" ++ show s ++ "," ++ show prec ++ ")"
-showSqlType SqlString  Nothing    True  = "TEXT CHARACTER SET utf8"
-showSqlType SqlString  Nothing    False = "TEXT"
-showSqlType SqlString  (Just i)   True  = "VARCHAR(" ++ show i ++ ") CHARACTER SET utf8"
-showSqlType SqlString  (Just i)   False = "VARCHAR(" ++ show i ++ ")"
-showSqlType SqlTime    _          _     = "TIME"
-showSqlType (SqlOther t) _        _     = T.unpack t
+showSqlType _      SqlBlob    Nothing    _     = "BLOB"
+showSqlType _      SqlBlob    (Just i)   _     = "VARBINARY(" ++ show i ++ ")"
+showSqlType _      SqlBool    _          _     = "TINYINT(1)"
+showSqlType _      SqlDay     _          _     = "DATE"
+showSqlType _      SqlDayTime _          _     = "DATETIME"
+showSqlType _      SqlInt32   _          _     = "INT(11)"
+showSqlType _      SqlInt64   _          _     = "BIGINT"
+showSqlType _      SqlReal    _          _     = "DOUBLE"
+showSqlType _      (SqlNumeric s prec) _ _     = "NUMERIC(" ++ show s ++ "," ++ show prec ++ ")"
+showSqlType defEnc SqlString  Nothing    True  = "TEXT CHARACTER SET " ++ unDefEnc defEnc
+showSqlType _      SqlString  Nothing    False = "TEXT"
+showSqlType defEnc SqlString  (Just i)   True  = "VARCHAR(" ++ show i ++ ") CHARACTER SET " ++ unDefEnc defEnc
+showSqlType _      SqlString  (Just i)   False = "VARCHAR(" ++ show i ++ ")"
+showSqlType _      SqlTime    _          _     = "TIME"
+showSqlType _      (SqlOther t) _        _     = T.unpack t
 
 -- | Render an action that must be done on the database.
-showAlterDb :: AlterDB -> (Bool, Text)
-showAlterDb (AddTable s) = (False, pack s)
-showAlterDb (AlterColumn t (c, ac)) =
-    (isUnsafe ac, pack $ showAlter t (c, ac))
+showAlterDb :: DefEnc -> AlterDB -> (Bool, Text)
+showAlterDb _ (AddTable s) = (False, pack s)
+showAlterDb defEnc (AlterColumn t (c, ac)) =
+    (isUnsafe ac, pack $ showAlter defEnc t (c, ac))
   where
     isUnsafe Drop = True
     isUnsafe _    = False
-showAlterDb (AlterTable t at) = (False, pack $ showAlterTable t at)
+showAlterDb _ (AlterTable t at) = (False, pack $ showAlterTable t at)
 
 
 -- | Render an action that must be done on a table.
@@ -813,31 +911,31 @@ showAlterTable table (DropUniqueConstraint cname) = concat
 
 
 -- | Render an action that must be done on a column.
-showAlter :: DBName -> AlterColumn' -> String
-showAlter table (oldName, Change (Column n nu t def defConstraintName maxLen _ref)) =
+showAlter :: DefEnc -> DBName -> AlterColumn' -> String
+showAlter defEnc table (oldName, Change (Column n nu t def defConstraintName maxLen _ref)) =
     concat
     [ "ALTER TABLE "
     , escapeDBName table
     , " CHANGE "
     , escapeDBName oldName
     , " "
-    , showColumn (Column n nu t def defConstraintName maxLen Nothing)
+    , showColumn defEnc (Column n nu t def defConstraintName maxLen Nothing)
     ]
-showAlter table (_, Add' col) =
+showAlter defEnc table (_, Add' col) =
     concat
     [ "ALTER TABLE "
     , escapeDBName table
     , " ADD COLUMN "
-    , showColumn col
+    , showColumn defEnc col
     ]
-showAlter table (n, Drop) =
+showAlter _ table (n, Drop) =
     concat
     [ "ALTER TABLE "
     , escapeDBName table
     , " DROP COLUMN "
     , escapeDBName n
     ]
-showAlter table (n, Default s) =
+showAlter _ table (n, Default s) =
     concat
     [ "ALTER TABLE "
     , escapeDBName table
@@ -846,7 +944,7 @@ showAlter table (n, Default s) =
     , " SET DEFAULT "
     , s
     ]
-showAlter table (n, NoDefault) =
+showAlter _ table (n, NoDefault) =
     concat
     [ "ALTER TABLE "
     , escapeDBName table
@@ -854,7 +952,7 @@ showAlter table (n, NoDefault) =
     , escapeDBName n
     , " DROP DEFAULT"
     ]
-showAlter table (n, Update' s) =
+showAlter _ table (n, Update' s) =
     concat
     [ "UPDATE "
     , escapeDBName table
@@ -866,7 +964,7 @@ showAlter table (n, Update' s) =
     , escapeDBName n
     , " IS NULL"
     ]
-showAlter table (_, AddReference reftable fkeyname t2 id2) = concat
+showAlter _ table (_, AddReference reftable fkeyname t2 id2) = concat
     [ "ALTER TABLE "
     , escapeDBName table
     , " ADD CONSTRAINT "
@@ -879,7 +977,7 @@ showAlter table (_, AddReference reftable fkeyname t2 id2) = concat
     , intercalate "," $ map escapeDBName id2
     , ")"
     ]
-showAlter table (_, DropReference cname) = concat
+showAlter _ table (_, DropReference cname) = concat
     [ "ALTER TABLE "
     , escapeDBName table
     , " DROP FOREIGN KEY "
@@ -976,6 +1074,7 @@ mockMigrate _connectInfo allDefs _getter val = do
     let name = entityDB val
     let (newcols, udefs, fdefs) = mkColumns allDefs val
     let udspair = map udToPair udefs
+    let defEnc = DefEnc "utf8" -- Always use utf8 as encoding for a mock migration
     case () of
       -- Nothing found, create everything
       () -> do
@@ -990,7 +1089,7 @@ mockMigrate _connectInfo allDefs _getter val = do
         let foreignsAlt = map (\fdef -> let (childfields, parentfields) = unzip (map (\((_,b),(_,d)) -> (b,d)) (foreignFields fdef))
                                         in AlterColumn name (foreignRefTableDBName fdef, AddReference (foreignRefTableDBName fdef) (foreignConstraintNameDBName fdef) childfields parentfields)) fdefs
 
-        return $ Right $ map showAlterDb $ (addTable newcols val): uniques ++ foreigns ++ foreignsAlt
+        return $ Right $ map (showAlterDb defEnc) $ (addTable defEnc newcols val): uniques ++ foreigns ++ foreignsAlt
     {- FIXME redundant, why is this here? The whole case expression is weird
       -- No errors and something found, migrate
       (_, _, ([], old')) -> do
@@ -1002,7 +1101,7 @@ mockMigrate _connectInfo allDefs _getter val = do
             (acs, ats) = getAlters allDefs name (newcols, udspair) $ excludeForeignKeys $ partitionEithers old'
             acs' = map (AlterColumn name) acs
             ats' = map (AlterTable  name) ats
-        return $ Right $ map showAlterDb $ acs' ++ ats'
+        return $ Right $ map (showAlterDb defEnc) $ acs' ++ ats'
       -- Errors
       (_, _, (errs, _)) -> return $ Left errs
     -}
